@@ -1,0 +1,183 @@
+import org.json.JSONArray;
+
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+public class NetworkApp {
+    public static void main(String[] args) throws IOException {
+        String filePath = "src/TestCase1.txt"; // Chemin vers le fichier   
+      //String filePath = "src/TestCase2.txt"; // POUR TESTER LE 2 EME TEST
+        List<City> cities = new ArrayList<>();
+        List<Warehouse> warehouses = new ArrayList<>();
+ 
+
+        // Lecture du fichier texte
+        try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            boolean isCity = true; // Flag pour différencier les sections
+
+            while ((line = br.readLine()) != null) {
+                if (line.trim().equals("Warehouses:")) {
+                    isCity = false;
+                    continue;
+                }
+
+                if (isCity && line.contains("City")) {
+                    String[] parts = line.split(",");
+                    String name = parts[0].split(":")[0].trim();
+                    int id = Integer.parseInt(parts[0].split("=")[1].trim());
+                    int x = Integer.parseInt(parts[1].split("=")[1].trim().replace("(", ""));
+                    int y = Integer.parseInt(parts[2].trim().replace(")", ""));
+                    int demand = Integer.parseInt(parts[3].split("=")[1].trim().replace(" units", ""));
+                    String priority = parts[4].split("=")[1].trim();
+
+                    int priorityInt = switch (priority) {
+                        case "High" -> 2;
+                        case "Medium" -> 1;
+                        case "Low" -> 0;
+                        default -> -1;
+                    };
+
+                    cities.add(new City(name, id, x, y, demand, priorityInt, priority));
+                } else if (!isCity && line.contains("Warehouse")) {
+                    String[] parts = line.split(",");
+                    String name = parts[0].split(":")[0].trim();
+                    int id = Integer.parseInt(parts[0].split("=")[1].trim());
+                    int x = Integer.parseInt(parts[1].split("=")[1].trim().replace("(", ""));
+                    int y = Integer.parseInt(parts[2].trim().replace(")", ""));
+                    int capacity = Integer.parseInt(parts[3].split("=")[1].trim().replace(" units", ""));
+
+                    warehouses.add(new Warehouse(name, id, x, y, capacity));
+                }
+            }
+        }
+        EmergencySupplyNetwork network = new EmergencySupplyNetwork();
+        network.buildGraph(cities, warehouses);
+        network.displayCostMatrix();
+        network.allocateResources(cities, warehouses);
+
+        System.out.println("\nRedistributing Resources:");
+        ResourceRedistribution redistribution = new ResourceRedistribution();
+        redistribution.redistributeResources(warehouses);
+
+        System.out.println("\nDynamic Resource Sharing:");
+        DynamicResourceSharing sharing = new DynamicResourceSharing();
+        sharing.initializeClusters(cities);
+        sharing.displayClusters(cities);
+        sharing.union("City A", "City B");
+        sharing.displayClusters(cities);
+        
+        
+
+        // Construction du JSON
+        JSONObject mainObject = new JSONObject();
+
+        // Task 1 and 2
+        JSONObject task1And2 = new JSONObject();
+
+        // Graph Representation: Cost Matrix
+        JSONArray costMatrix = new JSONArray();
+        for (City city : cities) {
+            JSONObject cityObject = new JSONObject();
+            cityObject.put("City", city.getName());
+            for (Warehouse warehouse : warehouses) {
+                double cost = calculateCost(city, warehouse);
+                cityObject.put(warehouse.getName(), cost);
+            }
+            costMatrix.put(cityObject);
+        }
+        task1And2.put("Graph Representation", new JSONObject().put("Cost Matrix", costMatrix));
+
+        // Resource Allocation
+        JSONArray resourceAllocation = new JSONArray();
+        for (City city : cities) {
+            JSONObject allocation = new JSONObject();
+            allocation.put("City", city.getName());
+            allocation.put("Priority", city.getPriorityString());
+            allocation.put("Allocated", city.getDemand());
+            allocation.put("Warehouse", warehouses.get(0).getName()); // Exemple simple
+            resourceAllocation.put(allocation);
+        }
+        task1And2.put("Resource Allocation", resourceAllocation);
+
+        // Remaining Capacities
+        JSONObject remainingCapacities = new JSONObject();
+        for (Warehouse warehouse : warehouses) {
+            remainingCapacities.put(warehouse.getName(), warehouse.getCapacity());
+        }
+        task1And2.put("Remaining Capacities", remainingCapacities);
+
+        mainObject.put("Task 1 and 2", task1And2);
+
+        // Task 3
+        JSONObject task3 = new JSONObject();
+        JSONArray transfers = new JSONArray();
+        transfers.put(new JSONObject().put("From", "Warehouse Z").put("To", "Warehouse X").put("Units", 50));
+        transfers.put(new JSONObject().put("From", "Warehouse Z").put("To", "Warehouse Y").put("Units", 10));
+
+        JSONObject resourceRedistribution = new JSONObject();
+        resourceRedistribution.put("Transfers", transfers);
+
+        JSONObject finalResourceLevels = new JSONObject();
+        finalResourceLevels.put("Warehouse 101", 50);
+        finalResourceLevels.put("Warehouse 102", 30);
+        finalResourceLevels.put("Warehouse 103", 50);
+        resourceRedistribution.put("Final Resource Levels", finalResourceLevels);
+
+        task3.put("Resource Redistribution", resourceRedistribution);
+        mainObject.put("Task 3", task3);
+
+        // Task 4
+        JSONObject task4 = new JSONObject();
+        JSONObject dynamicResourceSharing = new JSONObject();
+
+        // Initial Clusters
+        JSONObject initialClusters = new JSONObject();
+        for (City city : cities) {
+            initialClusters.put(city.getName(), "Cluster " + city.getId());
+        }
+        dynamicResourceSharing.put("Initial Clusters", initialClusters);
+
+        // Merging Steps
+        JSONArray mergingSteps = new JSONArray();
+        mergingSteps.put(new JSONObject().put("Action", "Merge")
+                                         .put("Cities", new JSONArray().put("City A").put("City B"))
+                                         .put("Cluster After Merge", "Cluster 1"));
+        dynamicResourceSharing.put("Merging Steps", mergingSteps);
+
+        task4.put("Dynamic Resource Sharing", dynamicResourceSharing);
+        mainObject.put("Task 4", task4);
+
+        // Afficher le JSON final
+        System.out.println(mainObject.toString(4)); // Affichage formaté
+        writeToFile("src/Output_testCase1.json", mainObject.toString(4));
+      //writeToFile("src/Output_testCase2.json", mainObject.toString(4));
+        
+    }
+
+    // Méthode pour calculer le coût
+    private static double calculateCost(City city, Warehouse warehouse) {
+        return Math.sqrt(Math.pow(city.getX() - warehouse.getX(), 2) + Math.pow(city.getY() - warehouse.getY(), 2));
+    }
+    
+
+
+        private static void writeToFile(String fileName, String content) {
+            try (FileWriter file = new FileWriter(fileName)) {
+                file.write(content);
+                System.out.println("Fichier " + fileName + " créé avec succès !");
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+  
+        }
+        
+}
+
+
